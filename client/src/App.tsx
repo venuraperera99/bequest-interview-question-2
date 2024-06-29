@@ -3,7 +3,9 @@ import React, { useEffect, useState } from "react";
 const API_URL = "http://localhost:8080";
 
 function App() {
-  const [data, setData] = useState<string>();
+  const [data, setData] = useState<string>("");
+  const [checksum, setChecksum] = useState<string>("");
+  const [versions, setVersions] = useState<any[]>([]);
 
   useEffect(() => {
     getData();
@@ -11,8 +13,15 @@ function App() {
 
   const getData = async () => {
     const response = await fetch(API_URL);
-    const { data } = await response.json();
+    const { data, checksum } = await response.json();
     setData(data);
+    setChecksum(checksum);
+  };
+
+  const getVersions = async () => {
+    const response = await fetch(`${API_URL}/versions`);
+    const versions = await response.json();
+    setVersions(versions);
   };
 
   const updateData = async () => {
@@ -26,10 +35,38 @@ function App() {
     });
 
     await getData();
+    await getVersions();
   };
 
   const verifyData = async () => {
-    throw new Error("Not implemented");
+    const currentChecksum = await calculateChecksum(data);
+    if (currentChecksum === checksum) {
+      alert("Data is intact");
+    } else {
+      alert("Data has been tampered with");
+    }
+  };
+
+  const calculateChecksum = async (data: string) => {
+    const encoder = new TextEncoder();
+    const dataBuffer = encoder.encode(data);
+    const hashBuffer = await crypto.subtle.digest("SHA-256", dataBuffer);
+    const hashArray = Array.from(new Uint8Array(hashBuffer));
+    return hashArray.map(byte => byte.toString(16).padStart(2, '0')).join('');
+  };
+
+  const rollbackData = async (version: number) => {
+    await fetch(`${API_URL}/rollback`, {
+      method: "POST",
+      body: JSON.stringify({ version }),
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+      },
+    });
+
+    await getData();
+    await getVersions();
   };
 
   return (
@@ -63,6 +100,16 @@ function App() {
           Verify Data
         </button>
       </div>
+
+      <div>Versions:</div>
+      <ul>
+        {versions.map((version, index) => (
+          <li key={index}>
+            {index}: {version.data}
+            <button onClick={() => rollbackData(index)}>Rollback</button>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
